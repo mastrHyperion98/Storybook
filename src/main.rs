@@ -661,13 +661,17 @@ impl Storybook {
         .offset(0.0)
         .spacing(0.0);
 
-        let mb = menu_bar!(
-            (text("File"), file_menu),
+        let file_mb = menu_bar!(
+            (text("File"), file_menu)
+        );
+
+        let view_mb = menu_bar!(
             (text("View"), view_menu)
         );
 
         let menubar_row = row![
-            mb,
+            file_mb,
+            view_mb,
             text("Edit").size(14),
             text("Tools").size(14),
             text("Help").size(14),
