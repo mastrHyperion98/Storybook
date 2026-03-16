@@ -1,4 +1,6 @@
 use iced::Task;
+use iced_aw::{menu_bar, menu_items};
+use iced_aw::menu::Menu;
 
 mod project;
 use project::{Project, ProjectList};
@@ -12,7 +14,6 @@ struct Storybook {
     new_project_name: String,
     new_project_path: String,
     create_error: Option<String>,
-    show_file_menu: bool,
 }
 
 enum AppView {
@@ -32,7 +33,6 @@ enum Message {
     DeleteProject(PathBuf),
     ProjectCreated(Result<Project, String>),
     ProjectLoaded(Result<Project, String>),
-    ToggleFileMenu,
     CloseProject,
 }
 
@@ -52,7 +52,6 @@ impl Storybook {
                     .to_string_lossy()
                     .to_string(),
                 create_error: None,
-                show_file_menu: false,
             },
             cmd,
         )
@@ -164,14 +163,9 @@ impl Storybook {
                 Task::none()
             }
             Message::ProjectLoaded(Err(_)) => Task::none(),
-            Message::ToggleFileMenu => {
-                self.show_file_menu = !self.show_file_menu;
-                Task::none()
-            }
             Message::CloseProject => {
                 self.current_project = None;
                 self.view = AppView::ProjectManagement;
-                self.show_file_menu = false;
                 Task::none()
             }
         }
@@ -367,8 +361,8 @@ impl Storybook {
     }
 
     fn view_main_workspace(&self) -> iced::Element<Message> {
-        use iced::widget::{column, container, text};
-        use iced::Length;
+        use iced::widget::{column, container, text, Space};
+        use iced::{Border, Length};
 
         let menubar = self.view_menubar();
 
@@ -388,64 +382,62 @@ impl Storybook {
             .height(Length::Fill)
             .center_x(Length::Fill)
             .center_y(Length::Fill);
+        
+        // Create a thin separator line
+        let separator = container(Space::new().height(0))
+            .width(Length::Fill)
+            .style(|_theme| container::Style {
+                border: Border {
+                    color: iced::Color::from_rgb(0.7, 0.7, 0.7),
+                    width: 1.0,
+                    radius: 0.0.into(),
+                },
+                ..Default::default()
+            });
 
-        let layout = if let Some(file_menu) = self.view_file_menu() {
-            column![menubar, file_menu, main_content]
-                .width(Length::Fill)
-                .height(Length::Fill)
-        } else {
-            column![menubar, main_content]
-                .width(Length::Fill)
-                .height(Length::Fill)
-        };
+        let layout = column![menubar, separator, main_content]
+            .width(Length::Fill)
+            .height(Length::Fill);
 
         layout.into()
     }
 
     fn view_menubar(&self) -> iced::Element<Message> {
         use iced::widget::{button, container, row, text};
-        use iced::Length;
+        use iced::{Alignment, Length};
 
-        let file_button = button(text("File"))
-            .on_press(Message::ToggleFileMenu)
-            .padding(8);
+        let close_project_btn = button(
+            text("Close Project")
+                .width(Length::Fill)
+                .align_y(Alignment::Center)
+        )
+        .width(Length::Fill)
+        .on_press(Message::CloseProject);
 
-        let edit_button = button(text("Edit")).padding(8);
-        let view_button = button(text("View")).padding(8);
-        let tools_button = button(text("Tools")).padding(8);
-        let help_button = button(text("Help")).padding(8);
+        let file_menu = Menu::new(menu_items!(
+            (close_project_btn)
+        ))
+        .width(180.0)
+        .offset(0.0)
+        .spacing(0.0);
 
-        let menubar = row![
-            file_button,
-            edit_button,
-            view_button,
-            tools_button,
-            help_button,
+        let mb = menu_bar!(
+            (text("File"), file_menu)
+        );
+
+        let menubar_row = row![
+            mb,
+            text("Edit").size(14),
+            text("View").size(14),
+            text("Tools").size(14),
+            text("Help").size(14),
         ]
-        .spacing(5)
-        .padding(5);
+        .spacing(16)
+        .padding(8);
 
-        container(menubar).width(Length::Fill).into()
-    }
-
-    fn view_file_menu(&self) -> Option<iced::Element<Message>> {
-        if !self.show_file_menu {
-            return None;
-        }
-
-        use iced::widget::{button, column, container, text};
-        use iced::Length;
-
-        let close_project = button(text("Close Project"))
-            .on_press(Message::CloseProject)
+        container(menubar_row)
             .width(Length::Fill)
-            .padding(8);
-
-        let menu_content = column![close_project].spacing(2).padding(5);
-
-        let menu = container(menu_content).width(Length::Fixed(200.0));
-
-        Some(menu.into())
+            .into()
     }
 }
 
