@@ -1,8 +1,9 @@
 use iced::Task;
-use iced_aw::{menu_bar, menu_items};
-use iced_aw::menu::Menu;
 
 mod project;
+mod components;
+mod views;
+
 use project::{Project, ProjectList};
 use std::path::PathBuf;
 
@@ -203,209 +204,21 @@ impl Storybook {
 
 impl Storybook {
     fn view_project_management(&self) -> iced::Element<Message> {
-        use iced::widget::{button, column, container, scrollable, text, Space};
-        use iced::{Alignment, Length};
-
-        let title = text("Storybook - Project Management").size(32);
-
-        let create_button = button(text("+ Create New Project"))
-            .padding(10)
-            .on_press(Message::ShowCreateDialog);
-
-        let projects_grid = self.view_projects_grid();
-
-        let content = column![
-            title,
-            Space::new().height(20),
-            create_button,
-            Space::new().height(30),
-            projects_grid,
-        ]
-        .padding(40)
-        .align_x(Alignment::Start);
-
-        let base_view = container(scrollable(content))
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        if self.show_create_dialog {
-            self.view_create_dialog_overlay(base_view.into())
-        } else {
-            base_view.into()
-        }
-    }
-
-    fn view_create_dialog_overlay(
-        &self,
-        _base: iced::Element<Message>,
-    ) -> iced::Element<Message> {
-        use iced::widget::{button, column, container, row, text, text_input, Space};
-        use iced::{Alignment, Length};
-
-        let dialog_title = text("Create New Project").size(24);
-
-        let name_label = text("Project Name:").size(14);
-        let name_input = text_input(
-            "my-project",
+        views::project_management::view_project_management(
+            &self.project_list,
+            self.show_create_dialog,
             &self.new_project_name,
-        )
-        .on_input(Message::ProjectNameChanged)
-        .padding(10);
-
-        let path_label = text("Base Path:").size(14);
-        let path_input = text_input(
-            "/home/user/storybook",
             &self.new_project_path,
+            &self.create_error,
         )
-        .on_input(Message::ProjectPathChanged)
-        .padding(10);
-
-        let preview_path = if !self.new_project_name.is_empty() {
-            format!(
-                "Full path: {}/{}",
-                self.new_project_path, self.new_project_name
-            )
-        } else {
-            "Full path: (enter project name)".to_string()
-        };
-        let preview_text = text(preview_path).size(12);
-
-        let error_message = if let Some(err) = &self.create_error {
-            column![
-                text(err).size(14),
-                Space::new().height(10),
-            ]
-        } else {
-            column![]
-        };
-
-        let create_btn = button(text("Create"))
-            .padding(10)
-            .on_press(Message::CreateProject);
-
-        let cancel_btn = button(text("Cancel"))
-            .padding(10)
-            .on_press(Message::HideCreateDialog);
-
-        let buttons = row![create_btn, Space::new().width(10), cancel_btn]
-            .spacing(10);
-
-        let dialog_content = column![
-            dialog_title,
-            Space::new().height(20),
-            name_label,
-            name_input,
-            Space::new().height(15),
-            path_label,
-            path_input,
-            Space::new().height(10),
-            preview_text,
-            Space::new().height(20),
-            error_message,
-            buttons,
-        ]
-        .padding(30)
-        .align_x(Alignment::Start)
-        .width(Length::Fixed(500.0));
-
-        let dialog = container(dialog_content)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill)
-            .width(Length::Fill)
-            .height(Length::Fill);
-
-        dialog.into()
-    }
-
-    fn view_projects_grid(&self) -> iced::Element<Message> {
-        use iced::widget::{column, row};
-
-        let sorted_projects = self.project_list.sorted_by_recent();
-
-        let mut rows_vec = Vec::new();
-        let mut current_row = Vec::new();
-
-        for (i, project) in sorted_projects.iter().enumerate() {
-            current_row.push(self.view_project_card(project));
-
-            if (i + 1) % 2 == 0 || i == sorted_projects.len() - 1 {
-                let row_elements = current_row.drain(..).collect::<Vec<_>>();
-                rows_vec.push(row(row_elements).spacing(16).into());
-            }
-        }
-
-        column(rows_vec).spacing(16).into()
-    }
-
-    fn view_project_card<'a>(&'a self, project: &'a Project) -> iced::Element<'a, Message> {
-        use iced::widget::{button, column, container, row, text, Space};
-        use iced::{Alignment, Length};
-
-        let is_available = project.is_available();
-
-        let name_text = text(&project.name).size(18);
-
-        let time_ago = format_time_ago(&project.last_opened);
-        let timestamp_text = text(format!("Last opened: {}", time_ago)).size(14);
-
-        let path_text = text(project.path.display().to_string()).size(12);
-
-        let delete_button = button(text("×").size(20))
-            .on_press(Message::DeleteProject(project.path.clone()));
-
-        let mut header_items = vec![
-            name_text.into(),
-            Space::new().width(Length::Fill).into(),
-        ];
-        
-        if !is_available {
-            header_items.push(text("⚠️").size(16).into());
-        }
-        
-        header_items.push(delete_button.into());
-        
-        let header = row(header_items).align_y(Alignment::Center);
-
-        let card_content =
-            column![header, timestamp_text, path_text,].spacing(8).padding(16);
-
-        let card = container(card_content)
-            .width(Length::Fixed(350.0))
-            .height(Length::Fixed(120.0));
-
-        if is_available {
-            button(card)
-                .on_press(Message::LoadProject(project.path.clone()))
-                .into()
-        } else {
-            card.into()
-        }
     }
 
     fn view_main_workspace(&self) -> iced::Element<Message> {
         use iced::widget::{column, container, row, text, Space};
         use iced::{Border, Length};
 
-        let menubar = self.view_menubar();
+        let menubar = components::menubar::view_menubar();
 
-        let content: iced::Element<Message> = if let Some(project) = &self.current_project {
-            column![
-                text(format!("Project: {}", project.name)).size(24),
-                text("Main workspace content area").size(16),
-            ]
-            .padding(20)
-            .spacing(10)
-            .into()
-        } else {
-            column![text("No project loaded").size(24)].padding(20).into()
-        };
-
-        let main_content = container(content)
-            .width(Length::Fill)
-            .height(Length::Fill)
-            .center_x(Length::Fill)
-            .center_y(Length::Fill);
-        
         // Create a thin separator line
         let separator = container(Space::new().height(0))
             .width(Length::Fill)
@@ -419,9 +232,14 @@ impl Storybook {
             });
 
         // Create workspace layout: sidebar + writing pane + secondary panel
-        let sidebar = self.view_sidebar();
-        let writing_pane = self.view_writing_pane();
-        let secondary_panel = self.view_secondary_panel();
+        let sidebar = components::sidebar::view_sidebar(
+            self.sidebar_collapsed,
+            self.selected_secondary_panel,
+        );
+        let writing_pane = views::writing_pane::view_writing_pane();
+        let secondary_panel = views::secondary_panel::view_secondary_panel(
+            self.selected_secondary_panel,
+        );
         
         let workspace_content: iced::Element<Message> = row![
             sidebar,
@@ -439,250 +257,6 @@ impl Storybook {
         layout.into()
     }
 
-    fn view_sidebar(&self) -> iced::Element<Message> {
-        use iced::widget::{button, column, container, text, Space};
-        use iced::{Background, Border, Color, Length};
-
-        if self.sidebar_collapsed {
-            // Collapsed sidebar - just show collapse/expand button
-            let expand_btn = button(text("▶").size(12))
-                .padding(8)
-                .on_press(Message::ToggleSidebarCollapse)
-                .style(|_theme, status| {
-                    let bg_color = match status {
-                        iced::widget::button::Status::Hovered => Color::from_rgb(0.25, 0.25, 0.25),
-                        _ => Color::from_rgb(0.2, 0.2, 0.2),
-                    };
-                    iced::widget::button::Style {
-                        background: Some(Background::Color(bg_color)),
-                        text_color: Color::from_rgb(0.9, 0.9, 0.9),
-                        border: Border::default(),
-                        shadow: iced::Shadow::default(),
-                        snap: false,
-                    }
-                });
-            
-            return container(column![expand_btn])
-                .width(Length::Fixed(40.0))
-                .height(Length::Fill)
-                .style(|_theme| container::Style {
-                    background: Some(Background::Color(Color::from_rgb(0.15, 0.15, 0.15))),
-                    border: Border {
-                        color: Color::from_rgb(0.3, 0.3, 0.3),
-                        width: 1.0,
-                        radius: 0.0.into(),
-                    },
-                    ..Default::default()
-                })
-                .into();
-        }
-
-        // Helper to create tab button
-        let create_tab_button = |label: &'static str, panel: SecondaryPanel| {
-            let is_active = self.selected_secondary_panel == panel;
-            button(text(label).size(13).width(Length::Fill))
-                .width(Length::Fill)
-                .padding([10, 12])
-                .on_press(Message::SelectSecondaryPanel(panel))
-                .style(move |_theme, status| {
-                    let base_color = if is_active {
-                        Color::from_rgb(0.25, 0.25, 0.25)
-                    } else {
-                        Color::TRANSPARENT
-                    };
-                    
-                    let bg_color = match status {
-                        iced::widget::button::Status::Hovered => {
-                            if is_active {
-                                Color::from_rgb(0.28, 0.28, 0.28)
-                            } else {
-                                Color::from_rgb(0.22, 0.22, 0.22)
-                            }
-                        }
-                        iced::widget::button::Status::Pressed => {
-                            Color::from_rgb(0.20, 0.20, 0.20)
-                        }
-                        _ => base_color,
-                    };
-                    
-                    iced::widget::button::Style {
-                        background: Some(Background::Color(bg_color)),
-                        text_color: if is_active {
-                            Color::from_rgb(1.0, 1.0, 1.0)
-                        } else {
-                            Color::from_rgb(0.8, 0.8, 0.8)
-                        },
-                        border: Border::default(),
-                        shadow: iced::Shadow::default(),
-                        snap: false,
-                    }
-                })
-        };
-
-        let collapse_btn = button(text("◀").size(12))
-            .padding(6)
-            .on_press(Message::ToggleSidebarCollapse)
-            .style(|_theme, status| {
-                let bg_color = match status {
-                    iced::widget::button::Status::Hovered => Color::from_rgb(0.25, 0.25, 0.25),
-                    _ => Color::TRANSPARENT,
-                };
-                iced::widget::button::Style {
-                    background: Some(Background::Color(bg_color)),
-                    text_color: Color::from_rgb(0.7, 0.7, 0.7),
-                    border: Border::default(),
-                    shadow: iced::Shadow::default(),
-                    snap: false,
-                }
-            });
-
-        let sidebar_content = column![
-            container({
-                use iced::widget::row;
-                row![
-                    text("Panels").size(13),
-                    Space::new().width(Length::Fill),
-                    collapse_btn,
-                ]
-            })
-            .padding([8, 12])
-            .width(Length::Fill),
-            Space::new().height(4),
-            create_tab_button("Characters", SecondaryPanel::CharacterDatabase),
-            create_tab_button("World Events", SecondaryPanel::WorldEvents),
-            create_tab_button("Lore", SecondaryPanel::Lore),
-            create_tab_button("AI Assistant", SecondaryPanel::AiAssistant),
-        ]
-        .spacing(0);
-
-        container(sidebar_content)
-            .width(Length::Fixed(180.0))
-            .height(Length::Fill)
-            .style(|_theme| container::Style {
-                background: Some(Background::Color(Color::from_rgb(0.15, 0.15, 0.15))),
-                border: Border {
-                    color: Color::from_rgb(0.3, 0.3, 0.3),
-                    width: 1.0,
-                    radius: 0.0.into(),
-                },
-                ..Default::default()
-            })
-            .into()
-    }
-
-    fn view_writing_pane(&self) -> iced::Element<Message> {
-        use iced::widget::{container, text};
-        use iced::{Background, Border, Color, Length};
-
-        container(
-            text("Writing Pane\n(Always visible)")
-                .size(16)
-        )
-        .padding(20)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_theme| container::Style {
-            background: Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
-            border: Border {
-                color: Color::from_rgb(0.3, 0.3, 0.3),
-                width: 1.0,
-                radius: 0.0.into(),
-            },
-            text_color: Some(Color::from_rgb(0.9, 0.9, 0.9)),
-            shadow: iced::Shadow::default(),
-            snap: false,
-        })
-        .into()
-    }
-
-    fn view_secondary_panel(&self) -> iced::Element<Message> {
-        use iced::widget::{container, text};
-        use iced::{Background, Border, Color, Length};
-
-        let panel_name = match self.selected_secondary_panel {
-            SecondaryPanel::CharacterDatabase => "Character Database",
-            SecondaryPanel::WorldEvents => "World Events",
-            SecondaryPanel::Lore => "Lore Repository",
-            SecondaryPanel::AiAssistant => "AI Assistant",
-        };
-
-        container(
-            text(format!("{}\n(Secondary Panel)", panel_name))
-                .size(16)
-        )
-        .padding(20)
-        .width(Length::Fill)
-        .height(Length::Fill)
-        .style(|_theme| container::Style {
-            background: Some(Background::Color(Color::from_rgb(0.12, 0.12, 0.12))),
-            border: Border {
-                color: Color::from_rgb(0.3, 0.3, 0.3),
-                width: 1.0,
-                radius: 0.0.into(),
-            },
-            text_color: Some(Color::from_rgb(0.9, 0.9, 0.9)),
-            shadow: iced::Shadow::default(),
-            snap: false,
-        })
-        .into()
-    }
-
-    fn view_menubar(&self) -> iced::Element<Message> {
-        use iced::widget::{button, container, row, text};
-        use iced::{Alignment, Length};
-
-        let close_project_btn = button(
-            text("Close Project")
-                .width(Length::Fill)
-                .align_y(Alignment::Center)
-        )
-        .width(Length::Fill)
-        .on_press(Message::CloseProject);
-
-        let file_menu = Menu::new(menu_items!(
-            (close_project_btn)
-        ))
-        .width(180.0)
-        .offset(0.0)
-        .spacing(0.0);
-
-        let toggle_sidebar_btn = button(
-            text("Toggle Sidebar")
-                .width(Length::Fill)
-                .align_y(Alignment::Center)
-        )
-        .width(Length::Fill)
-        .on_press(Message::ToggleSidebarCollapse);
-
-        let view_menu = Menu::new(menu_items!(
-            (toggle_sidebar_btn)
-        ))
-        .width(180.0)
-        .offset(0.0)
-        .spacing(0.0);
-
-        let file_mb = menu_bar!(
-            (text("File"), file_menu)
-        );
-
-        let view_mb = menu_bar!(
-            (text("View"), view_menu)
-        );
-
-        let menubar_row = row![
-            file_mb,
-            view_mb,
-            text("Edit").size(14),
-            text("Tools").size(14),
-            text("Help").size(14),
-        ]
-        .spacing(16)
-        .padding(8);
-
-        container(menubar_row)
-            .width(Length::Fill)
-            .into()
-    }
 }
 
 fn format_time_ago(datetime: &chrono::DateTime<chrono::Utc>) -> String {
