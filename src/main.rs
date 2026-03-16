@@ -12,6 +12,7 @@ struct Storybook {
     new_project_name: String,
     new_project_path: String,
     create_error: Option<String>,
+    show_file_menu: bool,
 }
 
 enum AppView {
@@ -31,6 +32,8 @@ enum Message {
     DeleteProject(PathBuf),
     ProjectCreated(Result<Project, String>),
     ProjectLoaded(Result<Project, String>),
+    ToggleFileMenu,
+    CloseProject,
 }
 
 impl Application for Storybook {
@@ -56,6 +59,7 @@ impl Application for Storybook {
                     .to_string_lossy()
                     .to_string(),
                 create_error: None,
+                show_file_menu: false,
             },
             cmd,
         )
@@ -173,6 +177,16 @@ impl Application for Storybook {
                 Command::none()
             }
             Message::ProjectLoaded(Err(_)) => Command::none(),
+            Message::ToggleFileMenu => {
+                self.show_file_menu = !self.show_file_menu;
+                Command::none()
+            }
+            Message::CloseProject => {
+                self.current_project = None;
+                self.view = AppView::ProjectManagement;
+                self.show_file_menu = false;
+                Command::none()
+            }
         }
     }
 
@@ -366,24 +380,85 @@ impl Storybook {
     }
 
     fn view_main_workspace(&self) -> iced::Element<Message> {
-        use iced::widget::{container, text};
+        use iced::widget::{column, container, text};
         use iced::Length;
 
-        if let Some(project) = &self.current_project {
-            container(text(format!("Workspace: {}", project.name)).size(24))
-                .width(Length::Fill)
-                .height(Length::Fill)
-                .center_x()
-                .center_y()
-                .into()
+        let menubar = self.view_menubar();
+
+        let content = if let Some(project) = &self.current_project {
+            column![
+                text(format!("Project: {}", project.name)).size(24),
+                text("Main workspace content area").size(16),
+            ]
+            .padding(20)
+            .spacing(10)
         } else {
-            container(text("No project loaded").size(24))
+            column![text("No project loaded").size(24)].padding(20)
+        };
+
+        let main_content = container(content)
+            .width(Length::Fill)
+            .height(Length::Fill)
+            .center_x()
+            .center_y();
+
+        let layout = if let Some(file_menu) = self.view_file_menu() {
+            column![menubar, file_menu, main_content]
                 .width(Length::Fill)
                 .height(Length::Fill)
-                .center_x()
-                .center_y()
-                .into()
+        } else {
+            column![menubar, main_content]
+                .width(Length::Fill)
+                .height(Length::Fill)
+        };
+
+        layout.into()
+    }
+
+    fn view_menubar(&self) -> iced::Element<Message> {
+        use iced::widget::{button, container, row, text};
+        use iced::Length;
+
+        let file_button = button(text("File"))
+            .on_press(Message::ToggleFileMenu)
+            .padding(8);
+
+        let edit_button = button(text("Edit")).padding(8);
+        let view_button = button(text("View")).padding(8);
+        let tools_button = button(text("Tools")).padding(8);
+        let help_button = button(text("Help")).padding(8);
+
+        let menubar = row![
+            file_button,
+            edit_button,
+            view_button,
+            tools_button,
+            help_button,
+        ]
+        .spacing(5)
+        .padding(5);
+
+        container(menubar).width(Length::Fill).into()
+    }
+
+    fn view_file_menu(&self) -> Option<iced::Element<Message>> {
+        if !self.show_file_menu {
+            return None;
         }
+
+        use iced::widget::{button, column, container, text};
+        use iced::Length;
+
+        let close_project = button(text("Close Project"))
+            .on_press(Message::CloseProject)
+            .width(Length::Fill)
+            .padding(8);
+
+        let menu_content = column![close_project].spacing(2).padding(5);
+
+        let menu = container(menu_content).width(Length::Fixed(200.0));
+
+        Some(menu.into())
     }
 }
 
