@@ -8,6 +8,10 @@ struct Storybook {
     view: AppView,
     project_list: ProjectList,
     current_project: Option<Project>,
+    show_create_dialog: bool,
+    new_project_name: String,
+    new_project_path: String,
+    create_error: Option<String>,
 }
 
 enum AppView {
@@ -18,7 +22,11 @@ enum AppView {
 #[derive(Debug, Clone)]
 enum Message {
     ProjectsLoaded(Result<ProjectList, String>),
-    CreateProject(String, PathBuf),
+    ShowCreateDialog,
+    HideCreateDialog,
+    ProjectNameChanged(String),
+    ProjectPathChanged(String),
+    CreateProject,
     LoadProject(PathBuf),
     DeleteProject(PathBuf),
     ProjectCreated(Result<Project, String>),
@@ -42,6 +50,12 @@ impl Application for Storybook {
                 view: AppView::ProjectManagement,
                 project_list: ProjectList::default(),
                 current_project: None,
+                show_create_dialog: false,
+                new_project_name: String::new(),
+                new_project_path: Project::default_base_path()
+                    .to_string_lossy()
+                    .to_string(),
+                create_error: None,
             },
             cmd,
         )
@@ -73,7 +87,41 @@ impl Application for Storybook {
                 Command::none()
             }
             Message::ProjectsLoaded(Err(_)) => Command::none(),
-            Message::CreateProject(name, base_path) => {
+            Message::ShowCreateDialog => {
+                self.show_create_dialog = true;
+                self.new_project_name = String::new();
+                self.new_project_path = Project::default_base_path()
+                    .to_string_lossy()
+                    .to_string();
+                self.create_error = None;
+                Command::none()
+            }
+            Message::HideCreateDialog => {
+                self.show_create_dialog = false;
+                self.create_error = None;
+                Command::none()
+            }
+            Message::ProjectNameChanged(name) => {
+                self.new_project_name = name;
+                self.create_error = None;
+                Command::none()
+            }
+            Message::ProjectPathChanged(path) => {
+                self.new_project_path = path;
+                self.create_error = None;
+                Command::none()
+            }
+            Message::CreateProject => {
+                if !Project::validate_name(&self.new_project_name) {
+                    self.create_error = Some(
+                        "Invalid project name. Use only letters, numbers, hyphens, and underscores."
+                            .to_string(),
+                    );
+                    return Command::none();
+                }
+
+                let name = self.new_project_name.clone();
+                let base_path = PathBuf::from(&self.new_project_path);
                 let path = base_path.join(&name);
                 let project = Project::new(name, path);
                 Command::perform(
@@ -91,9 +139,15 @@ impl Application for Storybook {
                 let _ = self.project_list.save();
                 self.current_project = Some(project);
                 self.view = AppView::MainWorkspace;
+                self.show_create_dialog = false;
+                self.new_project_name = String::new();
+                self.create_error = None;
                 Command::none()
             }
-            Message::ProjectCreated(Err(_)) => Command::none(),
+            Message::ProjectCreated(Err(e)) => {
+                self.create_error = Some(e);
+                Command::none()
+            }
             Message::LoadProject(path) => {
                 if let Some(project) =
                     self.project_list.projects.iter().find(|p| p.path == path)
@@ -137,7 +191,9 @@ impl Storybook {
 
         let title = text("Storybook - Project Management").size(32);
 
-        let create_button = button(text("+ Create New Project")).padding(10);
+        let create_button = button(text("+ Create New Project"))
+            .padding(10)
+            .on_press(Message::ShowCreateDialog);
 
         let projects_grid = self.view_projects_grid();
 
@@ -151,10 +207,97 @@ impl Storybook {
         .padding(40)
         .align_items(Alignment::Start);
 
-        container(scrollable(content))
+        let base_view = container(scrollable(content))
             .width(Length::Fill)
-            .height(Length::Fill)
-            .into()
+            .height(Length::Fill);
+
+        if self.show_create_dialog {
+            self.view_create_dialog_overlay(base_view.into())
+        } else {
+            base_view.into()
+        }
+    }
+
+    fn view_create_dialog_overlay(
+        &self,
+        _base: iced::Element<Message>,
+    ) -> iced::Element<Message> {
+        use iced::widget::{button, column, container, row, text, text_input, Space};
+        use iced::{Alignment, Length};
+
+        let dialog_title = text("Create New Project").size(24);
+
+        let name_label = text("Project Name:").size(14);
+        let name_input = text_input(
+            "my-project",
+            &self.new_project_name,
+        )
+        .on_input(Message::ProjectNameChanged)
+        .padding(10);
+
+        let path_label = text("Base Path:").size(14);
+        let path_input = text_input(
+            "/home/user/storybook",
+            &self.new_project_path,
+        )
+        .on_input(Message::ProjectPathChanged)
+        .padding(10);
+
+        let preview_path = if !self.new_project_name.is_empty() {
+            format!(
+                "Full path: {}/{}",
+                self.new_project_path, self.new_project_name
+            )
+        } else {
+            "Full path: (enter project name)".to_string()
+        };
+        let preview_text = text(preview_path).size(12);
+
+        let error_message = if let Some(err) = &self.create_error {
+            column![
+                text(err).size(14),
+                Space::with_height(10),
+            ]
+        } else {
+            column![]
+        };
+
+        let create_btn = button(text("Create"))
+            .padding(10)
+            .on_press(Message::CreateProject);
+
+        let cancel_btn = button(text("Cancel"))
+            .padding(10)
+            .on_press(Message::HideCreateDialog);
+
+        let buttons = row![create_btn, Space::with_width(10), cancel_btn]
+            .spacing(10);
+
+        let dialog_content = column![
+            dialog_title,
+            Space::with_height(20),
+            name_label,
+            name_input,
+            Space::with_height(15),
+            path_label,
+            path_input,
+            Space::with_height(10),
+            preview_text,
+            Space::with_height(20),
+            error_message,
+            buttons,
+        ]
+        .padding(30)
+        .align_items(Alignment::Start)
+        .width(Length::Fixed(500.0));
+
+        let dialog = container(dialog_content)
+            .center_x()
+            .center_y()
+            .width(Length::Fill)
+            .height(Length::Fill);
+
+        dialog.into()
     }
 
     fn view_projects_grid(&self) -> iced::Element<Message> {
