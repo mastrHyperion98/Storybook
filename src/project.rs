@@ -35,23 +35,25 @@ impl Project {
             .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     }
 
-    pub fn initialize(&self) -> Result<(), Box<dyn std::error::Error>> {
-        std::fs::create_dir_all(&self.path)?;
+    pub fn initialize(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
+        std::fs::create_dir_all(&self.path)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
         let storybook_dir = self.path.join(".storybook");
-        std::fs::create_dir_all(&storybook_dir)?;
+        std::fs::create_dir_all(&storybook_dir)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
 
         let project_config = serde_json::json!({
             "name": self.name,
             "created": Utc::now(),
             "version": "0.1.0"
         });
-        let config_path = storybook_dir.join("project.json");
-        std::fs::write(
-            config_path,
-            serde_json::to_string_pretty(&project_config)?,
-        )?;
 
+        let config_path = storybook_dir.join("project.json");
+        let contents = serde_json::to_string_pretty(&project_config)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+        std::fs::write(config_path, contents)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
         Ok(())
     }
 
@@ -63,29 +65,37 @@ impl Project {
 }
 
 impl ProjectList {
-    pub fn load() -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn load() -> Result<Self, Box<dyn std::error::Error + Send>> {
         let config_path = Self::config_path()?;
         if !config_path.exists() {
             return Ok(Self::default());
         }
-        let contents = std::fs::read_to_string(config_path)?;
-        let list: ProjectList = serde_json::from_str(&contents)?;
+        let contents = std::fs::read_to_string(config_path)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+        let list: ProjectList = serde_json::from_str(&contents)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
         Ok(list)
     }
 
-    pub fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn save(&self) -> Result<(), Box<dyn std::error::Error + Send>> {
         let config_path = Self::config_path()?;
         if let Some(parent) = config_path.parent() {
-            std::fs::create_dir_all(parent)?;
+            std::fs::create_dir_all(parent)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
         }
-        let contents = serde_json::to_string_pretty(self)?;
-        std::fs::write(config_path, contents)?;
+        let contents = serde_json::to_string_pretty(self)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
+        std::fs::write(config_path, contents)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send>)?;
         Ok(())
     }
 
-    pub fn config_path() -> Result<PathBuf, Box<dyn std::error::Error>> {
-        let config_dir =
-            dirs::config_dir().ok_or("Could not find config directory")?;
+    pub fn config_path() -> Result<PathBuf, Box<dyn std::error::Error + Send>> {
+        let config_dir = dirs::config_dir()
+            .ok_or_else(|| Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Could not find config directory"
+            )) as Box<dyn std::error::Error + Send>)?;
         Ok(config_dir.join("storybook").join("projects.json"))
     }
 

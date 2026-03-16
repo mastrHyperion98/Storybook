@@ -1,4 +1,4 @@
-use iced::{Application, Command, Settings};
+use iced::Task;
 
 mod project;
 use project::{Project, ProjectList};
@@ -36,17 +36,10 @@ enum Message {
     CloseProject,
 }
 
-impl Application for Storybook {
-    type Executor = iced::executor::Default;
-    type Message = Message;
-    type Theme = iced::Theme;
-    type Flags = ();
-
-    fn new(_flags: ()) -> (Self, Command<Message>) {
-        let cmd = Command::perform(
-            async { ProjectList::load() },
-            |result| Message::ProjectsLoaded(result.map_err(|e| e.to_string())),
-        );
+impl Storybook {
+    fn new() -> (Self, Task<Message>) {
+        let cmd = Task::future(async { ProjectList::load() })
+            .map(|result| Message::ProjectsLoaded(result.map_err(|e| e.to_string())));
 
         (
             Storybook {
@@ -72,7 +65,7 @@ impl Application for Storybook {
         }
     }
 
-    fn update(&mut self, message: Message) -> Command<Message> {
+    fn update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::ProjectsLoaded(Ok(list)) => {
                 self.project_list = list;
@@ -82,15 +75,12 @@ impl Application for Storybook {
                         let path = project.path.clone();
                         self.project_list.update_last_opened(&path);
                         let _ = self.project_list.save();
-                        return Command::perform(
-                            async move { Ok(project) },
-                            Message::ProjectLoaded,
-                        );
+                        return Task::done(Message::ProjectLoaded(Ok(project)));
                     }
                 }
-                Command::none()
+                Task::none()
             }
-            Message::ProjectsLoaded(Err(_)) => Command::none(),
+            Message::ProjectsLoaded(Err(_)) => Task::none(),
             Message::ShowCreateDialog => {
                 self.show_create_dialog = true;
                 self.new_project_name = String::new();
@@ -98,22 +88,22 @@ impl Application for Storybook {
                     .to_string_lossy()
                     .to_string();
                 self.create_error = None;
-                Command::none()
+                Task::none()
             }
             Message::HideCreateDialog => {
                 self.show_create_dialog = false;
                 self.create_error = None;
-                Command::none()
+                Task::none()
             }
             Message::ProjectNameChanged(name) => {
                 self.new_project_name = name;
                 self.create_error = None;
-                Command::none()
+                Task::none()
             }
             Message::ProjectPathChanged(path) => {
                 self.new_project_path = path;
                 self.create_error = None;
-                Command::none()
+                Task::none()
             }
             Message::CreateProject => {
                 if !Project::validate_name(&self.new_project_name) {
@@ -121,22 +111,19 @@ impl Application for Storybook {
                         "Invalid project name. Use only letters, numbers, hyphens, and underscores."
                             .to_string(),
                     );
-                    return Command::none();
+                    return Task::none();
                 }
 
                 let name = self.new_project_name.clone();
                 let base_path = PathBuf::from(&self.new_project_path);
                 let path = base_path.join(&name);
                 let project = Project::new(name, path);
-                Command::perform(
-                    async move {
-                        project.initialize()?;
-                        Ok(project)
-                    },
-                    |result: Result<Project, Box<dyn std::error::Error>>| {
-                        Message::ProjectCreated(result.map_err(|e| e.to_string()))
-                    },
-                )
+                Task::future(async move {
+                    project.initialize()?;
+                    Ok(project)
+                }).map(|result: Result<Project, Box<dyn std::error::Error + Send>>| {
+                    Message::ProjectCreated(result.map_err(|e| e.to_string()))
+                })
             }
             Message::ProjectCreated(Ok(project)) => {
                 self.project_list.add_project(project.clone());
@@ -146,11 +133,11 @@ impl Application for Storybook {
                 self.show_create_dialog = false;
                 self.new_project_name = String::new();
                 self.create_error = None;
-                Command::none()
+                Task::none()
             }
             Message::ProjectCreated(Err(e)) => {
                 self.create_error = Some(e);
-                Command::none()
+                Task::none()
             }
             Message::LoadProject(path) => {
                 if let Some(project) =
@@ -164,28 +151,28 @@ impl Application for Storybook {
                         self.view = AppView::MainWorkspace;
                     }
                 }
-                Command::none()
+                Task::none()
             }
             Message::DeleteProject(path) => {
                 self.project_list.remove_project(&path);
                 let _ = self.project_list.save();
-                Command::none()
+                Task::none()
             }
             Message::ProjectLoaded(Ok(project)) => {
                 self.current_project = Some(project);
                 self.view = AppView::MainWorkspace;
-                Command::none()
+                Task::none()
             }
-            Message::ProjectLoaded(Err(_)) => Command::none(),
+            Message::ProjectLoaded(Err(_)) => Task::none(),
             Message::ToggleFileMenu => {
                 self.show_file_menu = !self.show_file_menu;
-                Command::none()
+                Task::none()
             }
             Message::CloseProject => {
                 self.current_project = None;
                 self.view = AppView::ProjectManagement;
                 self.show_file_menu = false;
-                Command::none()
+                Task::none()
             }
         }
     }
@@ -213,13 +200,13 @@ impl Storybook {
 
         let content = column![
             title,
-            Space::with_height(20),
+            Space::new().height(20),
             create_button,
-            Space::with_height(30),
+            Space::new().height(30),
             projects_grid,
         ]
         .padding(40)
-        .align_items(Alignment::Start);
+        .align_x(Alignment::Start);
 
         let base_view = container(scrollable(content))
             .width(Length::Fill)
@@ -270,7 +257,7 @@ impl Storybook {
         let error_message = if let Some(err) = &self.create_error {
             column![
                 text(err).size(14),
-                Space::with_height(10),
+                Space::new().height(10),
             ]
         } else {
             column![]
@@ -284,30 +271,30 @@ impl Storybook {
             .padding(10)
             .on_press(Message::HideCreateDialog);
 
-        let buttons = row![create_btn, Space::with_width(10), cancel_btn]
+        let buttons = row![create_btn, Space::new().width(10), cancel_btn]
             .spacing(10);
 
         let dialog_content = column![
             dialog_title,
-            Space::with_height(20),
+            Space::new().height(20),
             name_label,
             name_input,
-            Space::with_height(15),
+            Space::new().height(15),
             path_label,
             path_input,
-            Space::with_height(10),
+            Space::new().height(10),
             preview_text,
-            Space::with_height(20),
+            Space::new().height(20),
             error_message,
             buttons,
         ]
         .padding(30)
-        .align_items(Alignment::Start)
+        .align_x(Alignment::Start)
         .width(Length::Fixed(500.0));
 
         let dialog = container(dialog_content)
-            .center_x()
-            .center_y()
+            .center_x(Length::Fill)
+            .center_y(Length::Fill)
             .width(Length::Fill)
             .height(Length::Fill);
 
@@ -334,7 +321,7 @@ impl Storybook {
         column(rows_vec).spacing(16).into()
     }
 
-    fn view_project_card(&self, project: &Project) -> iced::Element<Message> {
+    fn view_project_card<'a>(&'a self, project: &'a Project) -> iced::Element<'a, Message> {
         use iced::widget::{button, column, container, row, text, Space};
         use iced::{Alignment, Length};
 
@@ -352,7 +339,7 @@ impl Storybook {
 
         let mut header_items = vec![
             name_text.into(),
-            Space::with_width(Length::Fill).into(),
+            Space::new().width(Length::Fill).into(),
         ];
         
         if !is_available {
@@ -361,7 +348,7 @@ impl Storybook {
         
         header_items.push(delete_button.into());
         
-        let header = row(header_items).align_items(Alignment::Center);
+        let header = row(header_items).align_y(Alignment::Center);
 
         let card_content =
             column![header, timestamp_text, path_text,].spacing(8).padding(16);
@@ -399,8 +386,8 @@ impl Storybook {
         let main_content = container(content)
             .width(Length::Fill)
             .height(Length::Fill)
-            .center_x()
-            .center_y();
+            .center_x(Length::Fill)
+            .center_y(Length::Fill);
 
         let layout = if let Some(file_menu) = self.view_file_menu() {
             column![menubar, file_menu, main_content]
@@ -478,5 +465,7 @@ fn format_time_ago(datetime: &chrono::DateTime<chrono::Utc>) -> String {
 }
 
 fn main() -> iced::Result {
-    Storybook::run(Settings::default())
+    iced::application(Storybook::new, Storybook::update, Storybook::view)
+        .title(|state: &Storybook| state.title())
+        .run()
 }
