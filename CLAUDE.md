@@ -19,6 +19,65 @@ in text generation, native in-app interactions (create a character, create a tow
 - Resolution: Application resolution should be scalable from small 720p displays to ultrawide 5220x1440p displays. 
   - Mostly through dynamic scalling and the ability to move tabs around. Again inspired from Jetbrains IDE suites.
 
+# File Structure
+
+The codebase follows a modular architecture with clear separation of concerns:
+
+```
+Storybook/
+├── src/
+│   ├── main.rs              # Core application logic, state management, message handling
+│   ├── project.rs           # Project and ProjectList data structures and persistence
+│   ├── components/          # Reusable UI components
+│   │   ├── mod.rs
+│   │   ├── menubar.rs       # Professional menubar with File/View menus
+│   │   └── sidebar.rs       # Collapsible sidebar with tab navigation
+│   └── views/               # Application views/screens
+│       ├── mod.rs
+│       ├── project_management.rs  # Project list, creation dialog, project cards
+│       ├── writing_pane.rs        # Main writing area
+│       └── secondary_panel.rs     # Tabbed secondary panels (Characters/World Events/Lore/AI)
+├── docs/
+│   ├── specs/               # Technical specifications
+│   ├── plans/               # Implementation plans
+│   └── checkpoints/         # Versioned checkpoints with change logs
+├── Cargo.toml               # Rust dependencies
+└── CLAUDE.md                # This file - project overview and guidelines
+```
+
+## Module Responsibilities
+
+**main.rs** (~300 lines)
+- Application state (`Storybook` struct)
+- Message enum and handling (`update()` function)
+- View routing (`view()` function)
+- Application initialization and main loop
+- Shared types (`AppView`, `SecondaryPanel` enums)
+- Utility functions (`format_time_ago()`)
+
+**project.rs**
+- `Project` struct with metadata (name, path, last_opened)
+- `ProjectList` for managing multiple projects
+- Persistence to `~/.config/storybook/projects.json`
+- Project validation and initialization
+
+**components/** (Reusable UI)
+- `menubar.rs`: Professional menubar with iced_aw menu widgets
+- `sidebar.rs`: Collapsible sidebar with tab-based navigation
+
+**views/** (Application screens)
+- `project_management.rs`: Complete project management UI
+- `writing_pane.rs`: Main writing area (placeholder)
+- `secondary_panel.rs`: Tabbed panels for tools
+
+## Design Principles
+
+- **Separation of Concerns**: UI components separate from business logic
+- **Single Responsibility**: Each module has one clear purpose
+- **Modularity**: Components can be modified independently
+- **Testability**: Components designed for unit testing
+- **Maintainability**: Small, focused files (~30-200 lines each)
+
 # Core Features
 
 - Tab container workspace: Allowing the user to open multiple tool views side by side
