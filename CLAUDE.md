@@ -14,6 +14,10 @@ in text generation, native in-app interactions (create a character, create a tow
 - LLM Model: ministral-3:3b parameters
 - spec driven design document folder: /docs
 - Rust Version: rustc 1.94.0
+- Design Language: Material Design 3
+- UI Theme: Default dark-mode with light mode option. Not defined by system theme.
+- Resolution: Application resolution should be scalable from small 720p displays to ultrawide 5220x1440p displays. 
+  - Mostly through dynamic scalling and the ability to move tabs around. Again inspired from Jetbrains IDE suites.
 
 # Core Features
 
